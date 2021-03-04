@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.14)
+project(DVB_ZVO0016)
+add_executable(${PROJECT_NAME} main.cpp)
+find_library(ucsi NAMES ucsi)
+target_link_libraries(${PROJECT_NAME} PRIVATE ucsi)

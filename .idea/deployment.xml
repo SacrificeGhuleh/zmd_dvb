@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="Remote Host (b31747fc-8690-462c-b71d-f714f76b710f)" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="Remote Host (82eea173-f5ac-4af7-bfa5-5053fbbf0e97)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/fei/zvo0016/dev/zmd_dvb" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debugremote" />
+            <excludedPath local="true" path="$PROJECT_DIR$/bin/release" />
+            <excludedPath local="true" path="lib" />
+            <excludedPath local="true" path="$PROJECT_DIR$/bin/debug" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+      <paths name="Remote Host (b31747fc-8690-462c-b71d-f714f76b710f)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/fei/zvo0016/dev/zmd_dvb" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debugremote" />
+            <excludedPath local="true" path="$PROJECT_DIR$/bin/release" />
+            <excludedPath local="true" path="$PROJECT_DIR$/bin/debug" />
+            <excludedPath local="true" path="$PROJECT_DIR$/lib" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
