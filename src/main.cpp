@@ -8,6 +8,7 @@
 #include <ctime>
 #include <cstdint>
 #include <vector>
+#include <map>
 
 #include <linux/dvb/frontend.h>
 #include <linux/dvb/dmx.h>
@@ -31,7 +32,21 @@
 #include <libdvbcfg/dvbcfg_zapchannel.h>
 #include <libdvbsec/dvbsec_api.h>
 #include <libdvbsec/dvbsec_cfg.h>
+#include <any>
 
+#define DEC_HEX "%d (0x%02x)"
+#define DEC_HEX_V(x) x,x
+
+constexpr uint16_t patTablePid = 0x00U;
+constexpr uint16_t nitTablePid = 0x10U;
+constexpr uint16_t sdtTablePid = 0x11U;
+
+bool isReservedPid(uint16_t pid) {
+  return
+      pid == patTablePid ||
+      pid == nitTablePid ||
+      pid == sdtTablePid;
+}
 
 /// \brief Displays data in hex format
 /// \param buf Pointer to input data
@@ -77,9 +92,103 @@ void hexDump(const T &buf) {
   hexDump(buf, sizeof(T));
 }
 
+inline void printIndent(int indent) {
+  if (indent > 0) {
+    while (indent--) {
+      printf("  ");
+    }
+  }
+}
+
+struct NetworkInfoDescriptor {
+  std::vector<uint32_t> frequencies;
+  std::string name;
+  uint32_t centre_frequency;
+  uint8_t bandwidth;
+  uint8_t priority;
+  uint8_t time_slicing_indicator;
+  uint8_t mpe_fec_indicator;
+  uint8_t constellation;
+  uint8_t hierarchy_information;
+  uint8_t code_rate_hp_stream;
+  uint8_t code_rate_lp_stream;
+  uint8_t guard_interval;
+  uint8_t transmission_mode;
+  uint8_t other_frequency_flag;
+  
+  void print(const int indent = 0) const {
+    printIndent(indent);
+    printf("%s basic info: \n", name.c_str());
+    
+    printIndent(indent + 1);
+    printf("Centre frequency: " DEC_HEX "\n", DEC_HEX_V(centre_frequency));
+    printIndent(indent + 1);
+    printf("Bandwidth: " DEC_HEX "\n", DEC_HEX_V(bandwidth));
+    printIndent(indent + 1);
+    printf("Priority: " DEC_HEX "\n", DEC_HEX_V(priority));
+    printIndent(indent + 1);
+    printf("Time slicingi ndicator: " DEC_HEX "\n", DEC_HEX_V(time_slicing_indicator));
+    printIndent(indent + 1);
+    printf("Mpe fec indicator: " DEC_HEX "\n", DEC_HEX_V(mpe_fec_indicator));
+    printIndent(indent + 1);
+    printf("Constellation: " DEC_HEX "\n", DEC_HEX_V(constellation));
+    printIndent(indent + 1);
+    printf("Hierarchy information: " DEC_HEX "\n", DEC_HEX_V(hierarchy_information));
+    printIndent(indent + 1);
+    printf("Code rate hp stream: " DEC_HEX "\n", DEC_HEX_V(code_rate_hp_stream));
+    printIndent(indent + 1);
+    printf("Code rate lp stream: " DEC_HEX "\n", DEC_HEX_V(code_rate_lp_stream));
+    printIndent(indent + 1);
+    printf("Guard interval: " DEC_HEX "\n", DEC_HEX_V(guard_interval));
+    printIndent(indent + 1);
+    printf("Transmission mode: " DEC_HEX "\n", DEC_HEX_V(transmission_mode));
+    printIndent(indent + 1);
+    printf("Other frequency flag: " DEC_HEX "\n", DEC_HEX_V(other_frequency_flag));
+    
+    printIndent(indent);
+    printf("\nFrequencies: \n");
+    
+    for (const auto &freq : frequencies) {
+      printIndent(indent + 1);
+      printf("%d kHz\n", freq);
+    }
+  }
+};
+
+struct SdtDescriptor {
+  int serviceType = -1;
+  std::string providerName;
+  std::string serviceName;
+  
+  void print(const int indent = 0) const {
+    printIndent(indent);
+    printf("Service type: " DEC_HEX "\n", DEC_HEX_V(serviceType));
+    
+    printIndent(indent);
+    printf("Provider name: %s\n", providerName.c_str());
+    
+    printIndent(indent);
+    printf("Service name: %s\n", serviceName.c_str());
+    
+  }
+};
+
+struct Program {
+  uint16_t pid;
+  uint16_t programNumber;
+  SdtDescriptor sdtDescriptor;
+  
+  void print(const int indent = 0) const {
+    printIndent(indent);
+    printf("Program number:" DEC_HEX "\n", DEC_HEX_V(programNumber));
+    printIndent(indent + 1);
+    printf("pid:" DEC_HEX "\n", DEC_HEX_V(pid));
+    sdtDescriptor.print(indent + 1);
+  }
+};
+
 class DVBInfo {
 public:
-  
   DVBInfo(const std::filesystem::path &path) : devicePath_(path), sec_(nullptr) {
     const bool exists = std::filesystem::exists(path);
     printf("Device \"%s\" exists: %s\n", path.c_str(), exists ? "true" : "fasle");
@@ -158,9 +267,6 @@ public:
     return sec_;
   }
   
-  void printInfo() {
-    printf("Path do device: %s\n", devicePath_.c_str());
-  }
   
   void parseLastSection() {
     if (sec_ == nullptr) {
@@ -195,7 +301,13 @@ public:
     //modifikovaný cyklus for
     //cyklus projde všechny sece PAT tabulky a do proměné cur zadá info a aktuální sekci
     mpeg_pat_section_programs_for_each(pat, cur) {
-      printf("  SCT program_number:0x%04x (%04d) pid:0x%04x\n", cur->program_number, cur->program_number, cur->pid);
+      printf("  SCT program_number:" DEC_HEX " pid:0x%04x\n", DEC_HEX_V(cur->program_number), cur->pid);
+      if (isReservedPid(cur->pid)) continue;
+      
+      Program currentProgram;
+      currentProgram.pid = cur->pid;
+      currentProgram.programNumber = cur->program_number;
+      programInfo_[cur->program_number] = (currentProgram);
     }
   }
   
@@ -215,18 +327,18 @@ public:
       close(handle_);
       throw std::runtime_error("Cant get nit section");
     }
+    
     nitSectionPart2 = dvb_nit_section_part2(nitSection);
-    
-    printf("  Network ID: %d  (0x%02x)\n", dvb_nit_section_network_id(nitSection), dvb_nit_section_network_id(nitSection));
-    
+
+//    printf("  Network ID: %d  (0x%02x)\n", dvb_nit_section_network_id(nitSection), dvb_nit_section_network_id(nitSection));
     dvb_nit_section_descriptors_for_each(nitSection, desc) {
-      printDescriptor(desc);
+      parseDescriptor(desc, &infoDescriptor_);
     }
     
     dvb_nit_section_transports_for_each(nitSection, nitSectionPart2, nitTransport) {
-      printf("\tSCT transport_stream_id:0x%04x original_network_id:0x%04x\n", nitTransport->transport_stream_id, nitTransport->original_network_id);
+//      printf("\tSCT transport_stream_id:0x%04x original_network_id:0x%04x\n", nitTransport->transport_stream_id, nitTransport->original_network_id);
       dvb_nit_transport_descriptors_for_each(nitTransport, desc) {
-        printDescriptor(desc);
+        parseDescriptor(desc, &infoDescriptor_);
       }
     }
     
@@ -247,11 +359,42 @@ public:
       close(handle_);
       throw std::runtime_error("Cant get sdt section");
     }
-    
     dvb_sdt_section_services_for_each(sdtSection, sdtService) {
-      printf("Service ID: %d\n", sdtService->service_id);
       dvb_sdt_service_descriptors_for_each(sdtService, desc) {
-        printDescriptor(desc);
+        if (desc->tag == dtag_dvb_service)
+          parseDescriptor(desc, &programInfo_[sdtService->service_id].sdtDescriptor);
+      }
+    }
+  }
+  
+  void parseProgramTable(struct section *sec, const int pid) {
+    struct mpeg_pmt_section *mpegPmtSection;
+    struct descriptor *desc;
+    struct mpeg_pmt_stream *mpegPmtStream;
+    struct section_ext *secExtended = nullptr;
+    
+    if ((secExtended = section_ext_decode(sec, 1)) == nullptr) {
+      close(handle_);
+      throw std::runtime_error("cant get section_ext");
+    }
+    
+    printf("SCT Decode PMT (pid:0x%04x) (table:0x%02x)\n", pid, sec->table_id);
+    
+    if ((mpegPmtSection = mpeg_pmt_section_codec(secExtended)) == nullptr) {
+      close(handle_);
+      throw std::runtime_error("cant get mpeg pmt section");
+    }
+    
+    uint8_t dummyNull = 0;
+    printf("SCT program_number:0x%04x pcr_pid:0x%02x\n", mpeg_pmt_section_program_number(mpegPmtSection), mpegPmtSection->pcr_pid);
+    mpeg_pmt_section_descriptors_for_each(mpegPmtSection, desc) {
+      parseDescriptor(desc, &dummyNull);
+    }
+    
+    mpeg_pmt_section_streams_for_each(mpegPmtSection, mpegPmtStream) {
+      printf("\tSCT stream_type:0x%02x pid:0x%04x\n", mpegPmtStream->stream_type, mpegPmtStream->pid);
+      mpeg_pmt_stream_descriptors_for_each(mpegPmtStream, desc) {
+        parseDescriptor(desc, &dummyNull);
       }
     }
   }
@@ -263,9 +406,6 @@ public:
     }
     
     printf("Table ID: %d (0x%x)\n", sec->table_id, sec->table_id);
-    
-    // TODO probably switch
-    
     if (sec->table_id == stag_mpeg_program_association) {
       parsePat(sec, pid);
       return;
@@ -277,43 +417,118 @@ public:
     }
     
     if (sec->table_id == stag_dvb_network_information_actual || sec->table_id == stag_dvb_network_information_other) {
-//      printf("nit parsing not implemented yet\n");
       parseNit(sec, pid);
+      return;
+    }
+    
+    if (sec->table_id == stag_mpeg_program_map) {
+      parseProgramTable(sec, pid);
       return;
     }
     
   }
   
-  void printDescriptor(struct descriptor *desc) {
+  void parseDescriptor(struct descriptor *desc, std::any anyDescriptor) {
     switch (desc->tag) {
       case dtag_dvb_service: {
+        auto *d = std::any_cast<SdtDescriptor *>(anyDescriptor);
         struct dvb_service_descriptor *serviceDescriptor;
         struct dvb_service_descriptor_part2 *serviceDescriptorPart2;
         
         serviceDescriptor = dvb_service_descriptor_codec(desc);
         if (serviceDescriptor != nullptr) {
           serviceDescriptorPart2 = dvb_service_descriptor_part2(serviceDescriptor);
-          printf("  Service type: %d (0x%02x)\n", serviceDescriptor->service_type, serviceDescriptor->service_type);
-          printf("  Provider name: %.*s\n",
-                 serviceDescriptor->service_provider_name_length,
-                 dvb_service_descriptor_service_provider_name(serviceDescriptor));
-          printf("  Service name: %.*s\n",
-                 serviceDescriptorPart2->service_name_length,
-                 dvb_service_descriptor_service_name(serviceDescriptorPart2));
+          
+          d->serviceName.resize(serviceDescriptorPart2->service_name_length);
+          sprintf(d->serviceName.data(), "%.*s", serviceDescriptorPart2->service_name_length,
+                  dvb_service_descriptor_service_name(serviceDescriptorPart2));
+          
+          d->providerName.resize(serviceDescriptor->service_provider_name_length);
+          sprintf(d->providerName.data(), "%.*s", serviceDescriptor->service_provider_name_length,
+                  dvb_service_descriptor_service_provider_name(serviceDescriptor));
+          
+          d->serviceType = serviceDescriptor->service_type;
         }
         
         return;
       }
-      default: {
-        printf("WARNING: Printing of descriptor with type %d (0x%02x) not implemented\n", desc->tag, desc->tag);
+      case dtag_dvb_terrestial_delivery_system: {
+        auto *d = std::any_cast<NetworkInfoDescriptor *>(anyDescriptor);
+        struct dvb_terrestrial_delivery_descriptor *tdDescriptor;
+        tdDescriptor = dvb_terrestrial_delivery_descriptor_codec(desc);
+        if (tdDescriptor != nullptr) {
+          d->centre_frequency = tdDescriptor->centre_frequency;
+          d->bandwidth = tdDescriptor->bandwidth;
+          d->priority = tdDescriptor->priority;
+          d->time_slicing_indicator = tdDescriptor->time_slicing_indicator;
+          d->mpe_fec_indicator = tdDescriptor->mpe_fec_indicator;
+          d->constellation = tdDescriptor->constellation;
+          d->hierarchy_information = tdDescriptor->hierarchy_information;
+          d->code_rate_hp_stream = tdDescriptor->code_rate_hp_stream;
+          d->code_rate_lp_stream = tdDescriptor->code_rate_lp_stream;
+          d->guard_interval = tdDescriptor->guard_interval;
+          d->transmission_mode = tdDescriptor->transmission_mode;
+          d->other_frequency_flag = tdDescriptor->other_frequency_flag;
+        }
         return;
       }
+      case dtag_dvb_frequency_list: {
+        auto *d = std::any_cast<NetworkInfoDescriptor *>(anyDescriptor);
+        struct dvb_frequency_list_descriptor *frequencyListDescriptor;
+        frequencyListDescriptor = dvb_frequency_list_descriptor_codec(desc);
+        if (frequencyListDescriptor != nullptr) {
+          int count = dvb_frequency_list_descriptor_centre_frequencies_count(frequencyListDescriptor);
+          uint32_t *freqs = dvb_frequency_list_descriptor_centre_frequencies(frequencyListDescriptor);
+          d->frequencies.resize(count);
+          for (int i = 0; i < count; i++) {
+            d->frequencies.at(i) = freqs[i];
+          }
+        }
+        return;
+      }
+      case dtag_dvb_network_name: {
+        auto *d = std::any_cast<NetworkInfoDescriptor *>(anyDescriptor);
+        struct dvb_network_name_descriptor *dvbNetworkNameDescriptor;
+        dvbNetworkNameDescriptor = dvb_network_name_descriptor_codec(desc);
+        if (dvbNetworkNameDescriptor != nullptr) {
+          d->name.resize(dvb_network_name_descriptor_name_length(dvbNetworkNameDescriptor));
+          sprintf(d->name.data(), "%.*s", dvb_network_name_descriptor_name_length(dvbNetworkNameDescriptor),
+                  dvb_network_name_descriptor_name(dvbNetworkNameDescriptor));
+        }
+        return;
+      }
+      
+      default: {
+        printf("WARNING: Printing of descriptor with type " DEC_HEX " not implemented\n", DEC_HEX_V(desc->tag));
+        return;
+      }
+    }
+  }
+  
+  void printInfo() {
+    printf("\n\n----------------------------------\n\n");
+    printf("Path do device: %s\n", devicePath_.c_str());
+    
+    infoDescriptor_.print();
+    
+    printf("\nPrograms:\n");
+    printPrograms(1);
+  }
+  
+  void printPrograms(const int indent = 0) {
+    for (const auto &[key, program] : programInfo_) {
+      program.print(indent);
+      printf("\n");
     }
   }
   
   ~DVBInfo() {
     printf("Destructor, closing handle\n");
     close(handle_);
+  }
+  
+  const std::map<uint16_t, Program> &getProgramInfo() const {
+    return programInfo_;
   }
 
 private:
@@ -325,15 +540,14 @@ private:
   int lastPid = -1;
   int handle_;
   const std::filesystem::path devicePath_;
+  std::map<uint16_t, Program> programInfo_;
+//  TdsDescriptor tsdDescriptor_;
+  NetworkInfoDescriptor infoDescriptor_;
 };
 
 int main(const int argc, const char **argv) {
   uint16_t adapterNr = 0;
   uint16_t demuxNr = 0;
-  
-  constexpr uint8_t patTablePid = 0x00U;
-  constexpr uint8_t nitTablePid = 0x10U;
-  constexpr uint8_t sdtTablePid = 0x11U;
   
   const char *defaultPath = "/dev/dvb";
   std::stringstream dvbDeviceName;
@@ -359,6 +573,15 @@ int main(const int argc, const char **argv) {
   dvbInfo.readPid(sdtTablePid);
   dvbInfo.dumpLastData();
   dvbInfo.parseLastSection();
+  
+  const auto &programInfo = dvbInfo.getProgramInfo();
+  for (const auto &[key, program] : programInfo) {
+    dvbInfo.readPid(program.pid);
+    dvbInfo.dumpLastData();
+    dvbInfo.parseLastSection();
+  }
+  
+  dvbInfo.printInfo();
   
   return 0;
 }
